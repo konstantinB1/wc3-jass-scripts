@@ -1,0 +1,106 @@
+globals
+  constant integer        LEVEL_1_DMG_SEC   = 10
+  constant integer        LEVEL_2_DMG_SEC   = 20
+  constant integer        LEVEL_3_DMG_SEC   = 30
+  
+  constant string         EFFECT_ANIMS      = "origin"
+  constant string         EFFECT_PATH       = "Doodads\\Cinematic\\FireRockSmall\\FireRockSmall.mdl"
+  
+  constant real           GROUP_RADIUS      = 400
+  constant real           SPELL_CODE        = 'A009'
+
+  integer                 current_dur       = 10
+  integer                 effect_index      = 0
+  integer                 units_in_group    = 0
+  boolean                 started           = false
+
+  effect   array          effect_ids
+  group                   units_in_range
+  
+
+endglobals
+
+function reset_state takes nothing returns nothing
+  set started = false
+  set current_dur = 8
+  set effect_index = 0
+  call DestroyGroup(units_in_range)
+endfunction
+
+function register_effect takes nothing returns nothing
+  local effect e = GetLastCreatedEffectBJ()
+  set effect_ids[effect_index] = e
+  set effect_index = (effect_index + 1)
+endfunction
+
+
+function apply_unit_effects takes nothing returns nothing
+  local unit   u  = GetEnumUnit()
+  local real   hp = GetUnitState(u, UNIT_STATE_LIFE) 
+
+  call AddSpecialEffectTargetUnitBJ("origin", u, "Doodads\\Cinematic\\FireRockSmall\\FireRockSmall.mdl")
+  call SetUnitLifeBJ(u, hp - LEVEL_1_DMG_SEC)
+
+  if (hp > 0) then
+    call register_effect()
+  endif
+
+endfunction
+
+
+function is_not_casting_unit takes nothing returns boolean
+  return ( IsUnitEnemy(GetFilterUnit(), Player(16)) == true )
+endfunction
+
+
+function count_units_in_group takes nothing returns nothing 
+  set units_in_group = (units_in_group + 1)
+endfunction
+
+function drop_effects takes nothing returns nothing
+  local effect cur_spell_iteration
+
+  if (effect_index <= 0) then
+    return
+  endif
+
+  loop
+    exitwhen effect_index == -1
+
+    set cur_spell_iteration = effect_ids[effect_index]
+ 
+    call DestroyEffectBJ(cur_spell_iteration)
+
+    set effect_ids[effect_index] = null
+    set effect_index = (effect_index - 1)
+  endloop
+endfunction
+
+
+function holy_damage takes nothing returns nothing
+  if (current_dur == 0) then
+    call reset_state()
+    return
+  endif
+
+  set effect_index = 0
+
+  set units_in_range = GetUnitsInRangeOfLocMatching(400, GetUnitLoc(gg_unit_H000_0000), Condition(function is_not_casting_unit))
+
+  call ForGroupBJ(units_in_range, function count_units_in_group)
+  call DisplayTimedTextToForce( GetPlayersAll(), 5.00, I2S(units_in_group))
+  if (units_in_group > 0) then
+    call ForGroupBJ(units_in_range, function apply_unit_effects)
+    set units_in_group = 0
+  endif
+
+  call TriggerSleepAction(1)
+
+  call drop_effects()
+
+  if (current_dur > 0) then
+    set effect_index = units_in_group
+    set current_dur = (current_dur - 1)
+    call holy_damage()
+  endif
+endfunction
